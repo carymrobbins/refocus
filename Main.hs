@@ -8,7 +8,7 @@ import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Data.Aeson (FromJSON, FromJSONKey, parseJSON)
-import Data.List (intercalate)
+import Data.Char (isSpace)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
@@ -44,7 +44,6 @@ main = do
     FocusOne app -> doFocus app
     FocusIter apps -> do
       active <- getActiveApp
-      putStrLn $ "active: " <> show active <> "\napps: " <> show apps
       if active `elem` apps then do
         let nextApp = head $ tail $ dropWhile (/= active) $ cycle apps
         doFocus nextApp
@@ -52,16 +51,20 @@ main = do
         doFocus $ head apps
 
 getActiveApp :: IO String
-getActiveApp = osascript $ intercalate "\n"
+getActiveApp = rtrim <$> osascript (unlines
     [ "tell application \"System Events\""
     , "item 1 of (get name of processes whose frontmost is true)"
     , "end tell"
-    ]
+    ])
 
 doFocus :: String -> IO ()
-doFocus app = void $ osascript $ "tell application " <> show app <> " to activate"
+doFocus app = osascript_ $ "tell application " <> show app <> " to activate"
 
 osascript :: String -> IO String
-osascript code =
-  (reverse . dropWhile (== '\n') . reverse)
-    <$> readProcess "osascript" ["-e", code] ""
+osascript code = readProcess "osascript" ["-e", code] ""
+
+osascript_ :: String -> IO ()
+osascript_ = void . osascript
+
+rtrim :: String -> String
+rtrim = reverse . dropWhile isSpace . reverse
