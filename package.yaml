@@ -11,6 +11,15 @@ extra-source-files:
 
 description:         Please see the README on GitHub at <https://github.com/carymrobbins/refocus#readme>
 
+default-extensions:
+- DeriveGeneric
+- ForeignFunctionInterface
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- LambdaCase
+- RecordWildCards
+- ScopedTypeVariables
+
 dependencies:
 - base >= 4.7 && < 5
 - aeson
@@ -19,6 +28,7 @@ dependencies:
 - extra
 - optparse-applicative
 - process
+- vector
 - yaml
 
 cc-options:
@@ -38,3 +48,5 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -Wall
+    - -Werror

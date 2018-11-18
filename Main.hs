@@ -1,31 +1,24 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Control.Applicative
-import Control.Exception
-import Control.Monad
+import Control.Applicative ((<|>))
+import Control.Monad (when)
 import Control.Monad.Extra (ifM, whenJust)
 import Data.Aeson (FromJSON, FromJSONKey, ToJSON, ToJSONKey, parseJSON)
-import Data.Char (isSpace)
+import Data.Char (isSpace, toLower)
 import Data.Coerce (coerce)
 import Data.Foldable (find)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
-import GHC.Generics
+import GHC.Generics (Generic)
 import System.Directory (getHomeDirectory, doesFileExist)
-import System.Environment (getArgs)
+import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr)
 import System.IO.Unsafe (unsafePerformIO)
-import System.Process (readProcess)
-
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 import qualified Options.Applicative as O
 
-import AppKitUtil (getActiveAppName, focusAppByName)
+import AppKitUtil (getActiveAppName, getAppName, getRunningApps, focusApp)
 
 data Config = Config { commands :: Map Command Focus }
   deriving (Eq, Show, Generic)
@@ -71,44 +64,59 @@ parseArgs = O.execParser $ O.info parser $ O.fullDesc
     <$> (Command <$> O.strArgument (O.metavar "<command>"))
     <*> O.flag False True (O.long "reverse")
 
+fromMaybeM :: (Monad m) => m a -> Maybe a -> m a
+fromMaybeM = flip maybe pure
+
 run :: IO ()
 run = do
   Args{..} <- parseArgs
   config@Config {..} <- Y.decodeFileThrow configPath
-  let focus = fromMaybe (error $ "Command not in " <> configPath) $ Map.lookup argsCommand commands
+  focus <- fromMaybeM
+    (abort $ "Command not in " <> configPath)
+    (Map.lookup argsCommand commands)
   case focus of
     FocusOne app -> do
       active <- getActiveAppNameOrError
       whenJust (findCommandForApp app config) (\c -> writeStateLastWindow c active)
-      focusAppByName app
+      doFocus app
     FocusIter apps -> do
       active <- getActiveAppNameOrError
       if active `elem` apps then do
         let apps' = (if argsReverse then reverse else id) apps
         let nextApp = head $ tail $ dropWhile (/= active) $ cycle apps'
-        focusAppByName nextApp
+        doFocus nextApp
         writeStateLastWindow argsCommand nextApp
       else do
         maybeWindow <- readStateLastWindow argsCommand
-        focusAppByName $ fromMaybe (head apps) maybeWindow
+        doFocus $ fromMaybe (head apps) maybeWindow
+
+abort :: String -> IO a
+abort msg = do
+  hPutStrLn stderr msg
+  exitFailure
+
+doFocus :: String -> IO ()
+doFocus appName = loop =<< getRunningApps
+  where
+  loop = \case
+    [] -> abort $ "No app found matching " ++ appName
+    (app:apps) -> getAppName app >>= \case
+      Just name | map toLower name == map toLower appName -> do
+        success <- focusApp app
+        when (not success) $ abort $ "Failed to move focus to app " ++ name
+      Just name -> putStrLn name >> loop apps
+      _ -> loop apps
 
 findCommandForApp :: String -> Config -> Maybe Command
 findCommandForApp app Config{..} =
-  fmap fst $ flip find (Map.toList commands) $ \(cmd, focus) ->
+  fmap fst $ flip find (Map.toList commands) $ \(_, focus) ->
     case focus of
       FocusOne _ -> False
       FocusIter apps -> app `elem` apps
 
--- getActiveApp :: IO String
--- getActiveApp = rtrim <$> osascript (unlines
---     [ "tell application \"System Events\""
---     , "item 1 of (get name of processes whose frontmost is true)"
---     , "end tell"
---     ])
-
 getActiveAppNameOrError :: IO String
 getActiveAppNameOrError =
-  fromMaybe (error "Active app not found!") <$> getActiveAppName
+  fromMaybeM (abort "Active app not found!") =<< getActiveAppName
 
 readState :: IO State
 readState =
@@ -125,12 +133,6 @@ writeState s = Y.encodeFile statePath s
 writeStateLastWindow :: Command -> String -> IO ()
 writeStateLastWindow command app =
   writeState =<< (State . Map.insert command app . unState <$> readState)
-
--- osascript :: String -> IO String
--- osascript code = readProcess "osascript" ["-e", code] ""
--- 
--- osascript_ :: String -> IO ()
--- osascript_ = void . osascript
 
 rtrim :: String -> String
 rtrim = reverse . dropWhile isSpace . reverse

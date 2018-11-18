@@ -9,7 +9,6 @@ NSRunningApplication* getActiveApp() {
 }
 
 const char* getAppName(NSRunningApplication* app) {
-  if (!app) return NULL;
   return [[app localizedName] UTF8String];
 }
 
@@ -18,21 +17,22 @@ const char* getActiveAppName() {
   return res;
 }
 
-void focusApp(NSRunningApplication* app) {
-  if (!app) return;
-  [app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+bool focusApp(NSRunningApplication* app) {
+  return [app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
 }
 
-NSRunningApplication* getAppByName(const char* name) {
-  for (NSRunningApplication* app in
-         [[NSWorkspace sharedWorkspace] runningApplications]) {
-    if (strcmp(getAppName(app), name) == 0) return app;
-  }
-  return NULL;
+NSArray* getRunningApps() {
+  return [[NSWorkspace sharedWorkspace] runningApplications];
 }
 
-void focusAppByName(const char* name) {
-  NSRunningApplication* app = getAppByName(name);
-  if (!app) return;
-  focusApp(app);
+int nsarrayLength(NSArray* arr) {
+  return [arr count];
+}
+
+NSEnumerator* nsarrayEnumerator(NSArray* arr) {
+  return [arr objectEnumerator];
+}
+
+id enumeratorNextObject(NSEnumerator* e) {
+  return [e nextObject];
 }

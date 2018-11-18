@@ -4,7 +4,7 @@ clean:
 	rm -f RefocusAppKitUtil.dylib
 	stack clean
 
-RefocusAppKitUtil.dylib:
+RefocusAppKitUtil.dylib: RefocusAppKitUtil.m
 	clang -Werror -shared \
 	  -framework Foundation \
 	  -framework AppKit \
