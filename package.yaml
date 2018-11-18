@@ -16,6 +16,8 @@ dependencies:
 - aeson
 - containers
 - directory
+- extra
+- optparse-applicative
 - process
 - yaml
 
