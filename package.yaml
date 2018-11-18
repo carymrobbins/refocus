@@ -21,11 +21,20 @@ dependencies:
 - process
 - yaml
 
+cc-options:
+- -v
+- -shared
+- -framework
+- Foundation
+- -framework
+- AppKit
+
 executables:
   refocus:
     main:                Main.hs
     source-dirs:         .
     ghc-options:
+    - RefocusAppKitUtil.dylib
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

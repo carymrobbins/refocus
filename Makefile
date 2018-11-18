@@ -1,6 +1,16 @@
-.PHONY: build run
+.PHONY: clean build run install
 
-build:
+clean:
+	rm -f RefocusAppKitUtil.dylib
+	stack clean
+
+RefocusAppKitUtil.dylib:
+	clang -Werror -shared \
+	  -framework Foundation \
+	  -framework AppKit \
+	  RefocusAppKitUtil.m -o RefocusAppKitUtil.dylib
+
+build: RefocusAppKitUtil.dylib
 	stack build
 
 run: build
@@ -8,4 +18,4 @@ run: build
 
 install: build
 	sudo cp $(PWD)/.stack-work/install/x86_64-osx/lts-12.13/8.4.3/bin/refocus /usr/local/bin
-
+	sudo cp $(PWD)/RefocusAppKitUtil.dylib /usr/local/lib

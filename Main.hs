@@ -25,6 +25,8 @@ import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 import qualified Options.Applicative as O
 
+import AppKitUtil (getActiveAppName, focusAppByName)
+
 data Config = Config { commands :: Map Command Focus }
   deriving (Eq, Show, Generic)
 
@@ -76,19 +78,19 @@ run = do
   let focus = fromMaybe (error $ "Command not in " <> configPath) $ Map.lookup argsCommand commands
   case focus of
     FocusOne app -> do
-      active <- getActiveApp
+      active <- getActiveAppNameOrError
       whenJust (findCommandForApp app config) (\c -> writeStateLastWindow c active)
-      doFocus app
+      focusAppByName app
     FocusIter apps -> do
-      active <- getActiveApp
+      active <- getActiveAppNameOrError
       if active `elem` apps then do
         let apps' = (if argsReverse then reverse else id) apps
         let nextApp = head $ tail $ dropWhile (/= active) $ cycle apps'
-        doFocus nextApp
+        focusAppByName nextApp
         writeStateLastWindow argsCommand nextApp
       else do
         maybeWindow <- readStateLastWindow argsCommand
-        doFocus $ fromMaybe (head apps) maybeWindow
+        focusAppByName $ fromMaybe (head apps) maybeWindow
 
 findCommandForApp :: String -> Config -> Maybe Command
 findCommandForApp app Config{..} =
@@ -97,15 +99,16 @@ findCommandForApp app Config{..} =
       FocusOne _ -> False
       FocusIter apps -> app `elem` apps
 
-getActiveApp :: IO String
-getActiveApp = rtrim <$> osascript (unlines
-    [ "tell application \"System Events\""
-    , "item 1 of (get name of processes whose frontmost is true)"
-    , "end tell"
-    ])
+-- getActiveApp :: IO String
+-- getActiveApp = rtrim <$> osascript (unlines
+--     [ "tell application \"System Events\""
+--     , "item 1 of (get name of processes whose frontmost is true)"
+--     , "end tell"
+--     ])
 
-doFocus :: String -> IO ()
-doFocus app = osascript_ $ "tell application " <> show app <> " to activate"
+getActiveAppNameOrError :: IO String
+getActiveAppNameOrError =
+  fromMaybe (error "Active app not found!") <$> getActiveAppName
 
 readState :: IO State
 readState =
@@ -123,11 +126,11 @@ writeStateLastWindow :: Command -> String -> IO ()
 writeStateLastWindow command app =
   writeState =<< (State . Map.insert command app . unState <$> readState)
 
-osascript :: String -> IO String
-osascript code = readProcess "osascript" ["-e", code] ""
-
-osascript_ :: String -> IO ()
-osascript_ = void . osascript
+-- osascript :: String -> IO String
+-- osascript code = readProcess "osascript" ["-e", code] ""
+-- 
+-- osascript_ :: String -> IO ()
+-- osascript_ = void . osascript
 
 rtrim :: String -> String
 rtrim = reverse . dropWhile isSpace . reverse
