@@ -1,8 +1,10 @@
 module AppKitUtil where
 
+import Conduit (liftIO)
+import Data.Conduit (ConduitT, runConduit, yield, (.|))
+import Data.Conduit.Combinators (sinkList)
 import Foreign.C.String (CString, peekCString)
 import Foreign.Ptr (Ptr, nullPtr)
-import qualified Data.Vector as Vector
 
 type NSArray a = Ptr ObjC_NSArray
 data ObjC_NSArray
@@ -19,14 +21,19 @@ foreign import ccall nsarrayEnumerator :: NSArray a -> IO (NSEnumerator a)
 
 foreign import ccall enumeratorNextObject :: NSEnumerator (Ptr a) -> IO (Ptr a)
 
-listFromNSArray :: NSArray (Ptr a) -> IO [Ptr a]
-listFromNSArray arr = do
-  e <- nsarrayEnumerator arr
-  Vector.toList <$> loop e Vector.empty
+-- | Create a ConduitT source to stream pointers from an NSArray.
+sourceFromNSArray :: forall a. NSArray (Ptr a) -> ConduitT () (Ptr a) IO ()
+sourceFromNSArray arr = do
+  loop =<< liftIO (nsarrayEnumerator arr)
   where
-  loop e acc = (maybePtr <$> enumeratorNextObject e) >>= \case
-    Just a -> loop e $ acc `Vector.snoc` a
-    Nothing -> pure acc
+  loop :: NSEnumerator (Ptr a) -> ConduitT () (Ptr a) IO ()
+  loop e = (maybePtr <$> liftIO (enumeratorNextObject e)) >>= \case
+    Just a -> yield a >> loop e
+    Nothing -> pure ()
+
+-- | Convert an NSArray to a Haskell list.
+listFromNSArray :: NSArray (Ptr a) -> IO [Ptr a]
+listFromNSArray arr = runConduit $ sourceFromNSArray arr .| sinkList
 
 foreign import ccall "getRunningApps"
   _getRunningApps :: IO (NSArray NSRunningApplication)
