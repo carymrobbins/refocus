@@ -1,8 +1,8 @@
 module Main where
 
 import Control.Applicative ((<|>))
-import Control.Monad (when)
-import Control.Monad.Extra (ifM, whenJust)
+import Control.Monad (mfilter)
+import Control.Monad.Extra (ifM, whenM, whenJust)
 import Data.Aeson (FromJSON, FromJSONKey, ToJSON, ToJSONKey, parseJSON)
 import Data.Char (isSpace, toLower)
 import Data.Coerce (coerce)
@@ -18,7 +18,7 @@ import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 import qualified Options.Applicative as O
 
-import AppKitUtil (getActiveAppName, getAppName, getRunningApps, focusApp)
+import AppKitUtil (NSRunningApplication, getActiveAppName, getAppName, getRunningApps, focusApp)
 
 data Config = Config { commands :: Map Command Focus }
   deriving (Eq, Show, Generic)
@@ -98,14 +98,18 @@ abort msg = do
 doFocus :: String -> IO ()
 doFocus appName = loop =<< getRunningApps
   where
+  matches :: String -> Bool
+  matches name = map toLower name == map toLower appName
+
+  loop :: [NSRunningApplication] -> IO ()
   loop = \case
     [] -> abort $ "No app found matching " ++ appName
-    (app:apps) -> getAppName app >>= \case
-      Just name | map toLower name == map toLower appName -> do
-        success <- focusApp app
-        when (not success) $ abort $ "Failed to move focus to app " ++ name
-      Just name -> putStrLn name >> loop apps
-      _ -> loop apps
+    (app:apps) ->
+      (mfilter matches <$> getAppName app) >>= \case
+        Nothing -> loop apps
+        Just name ->
+          whenM (not <$> focusApp app) $
+            abort $ "Failed to focus app " ++ name
 
 findCommandForApp :: String -> Config -> Maybe Command
 findCommandForApp app Config{..} =

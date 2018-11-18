@@ -13,8 +13,7 @@ const char* getAppName(NSRunningApplication* app) {
 }
 
 const char* getActiveAppName() {
-  const char* res = getAppName(getActiveApp());
-  return res;
+  return getAppName(getActiveApp());
 }
 
 bool focusApp(NSRunningApplication* app) {
