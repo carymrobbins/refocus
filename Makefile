@@ -1,5 +1,8 @@
 .PHONY: clean build run install
 
+build: RefocusAppKitUtil.dylib
+	stack build
+
 clean:
 	rm -f RefocusAppKitUtil.dylib
 	stack clean
@@ -9,9 +12,6 @@ RefocusAppKitUtil.dylib: RefocusAppKitUtil.m
 	  -framework Foundation \
 	  -framework AppKit \
 	  RefocusAppKitUtil.m -o RefocusAppKitUtil.dylib
-
-build: RefocusAppKitUtil.dylib
-	stack build
 
 run: build
 	stack exec refocus $(COMMAND)

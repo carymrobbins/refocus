@@ -8,7 +8,7 @@ import Data.Char (isSpace, toLower)
 import Data.Coerce (coerce)
 import Data.Foldable (find)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (maybeToList)
 import GHC.Generics (Generic)
 import System.Directory (getHomeDirectory, doesFileExist)
 import System.Exit (exitFailure)
@@ -78,35 +78,37 @@ run = do
     FocusOne app -> do
       active <- getActiveAppNameOrError
       whenJust (findCommandForApp app config) (\c -> writeStateLastWindow c active)
-      doFocus app
+      doFocus [app]
     FocusIter apps -> do
       active <- getActiveAppNameOrError
       if active `elem` apps then do
         let apps' = (if argsReverse then reverse else id) apps
         let nextApp = head $ tail $ dropWhile (/= active) $ cycle apps'
-        doFocus nextApp
+        doFocus [nextApp]
         writeStateLastWindow argsCommand nextApp
       else do
         maybeWindow <- readStateLastWindow argsCommand
-        doFocus $ fromMaybe (head apps) maybeWindow
+        doFocus $ maybeToList maybeWindow ++ apps
 
 abort :: String -> IO a
 abort msg = do
   hPutStrLn stderr msg
   exitFailure
 
-doFocus :: String -> IO ()
-doFocus appName = loop =<< getRunningApps
+doFocus :: [String] -> IO ()
+doFocus appNames = do
+  apps <- getRunningApps
+  loop $ (,) <$> appNames <*> apps
   where
-  matches :: String -> Bool
-  matches name = map toLower name == map toLower appName
+  matches :: String -> String -> Bool
+  matches appName name = map toLower name == map toLower appName
 
-  loop :: [NSRunningApplication] -> IO ()
+  loop :: [(String, NSRunningApplication)] -> IO ()
   loop = \case
-    [] -> abort $ "No app found matching " ++ appName
-    (app:apps) ->
-      (mfilter matches <$> getAppName app) >>= \case
-        Nothing -> loop apps
+    [] -> abort $ "No app found matching any of " ++ show appNames
+    (appName, app) : rest ->
+      (mfilter (matches appName) <$> getAppName app) >>= \case
+        Nothing -> loop rest
         Just name ->
           whenM (not <$> focusApp app) $
             abort $ "Failed to focus app " ++ name
