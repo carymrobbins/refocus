@@ -2,11 +2,12 @@ module Main where
 
 import Control.Applicative ((<|>))
 import Control.Monad (mfilter)
-import Control.Monad.Extra (ifM, whenM, whenJust)
+import Control.Monad.Extra (ifM, whenJust)
 import Data.Aeson (FromJSON, FromJSONKey, ToJSON, ToJSONKey, parseJSON)
 import Data.Char (isSpace, toLower)
 import Data.Coerce (coerce)
 import Data.Foldable (find)
+import Data.Functor (void)
 import Data.Map (Map)
 import Data.Maybe (maybeToList)
 import GHC.Generics (Generic)
@@ -78,24 +79,24 @@ run = do
     FocusOne app -> do
       active <- getActiveAppNameOrError
       whenJust (findCommandForApp app config) (\c -> writeStateLastWindow c active)
-      doFocus [app]
+      void $ doFocus [app]
     FocusIter apps -> do
       active <- getActiveAppNameOrError
       if active `elem` apps then do
         let apps' = (if argsReverse then reverse else id) apps
-        let nextApp = head $ tail $ dropWhile (/= active) $ cycle apps'
-        doFocus [nextApp]
+        let nextApps = take (length apps') $ tail $ dropWhile (/= active) $ cycle apps'
+        nextApp <- doFocus nextApps
         writeStateLastWindow argsCommand nextApp
       else do
         maybeWindow <- readStateLastWindow argsCommand
-        doFocus $ maybeToList maybeWindow ++ apps
+        void $ doFocus $ maybeToList maybeWindow ++ apps
 
 abort :: String -> IO a
 abort msg = do
   hPutStrLn stderr msg
   exitFailure
 
-doFocus :: [String] -> IO ()
+doFocus :: [String] -> IO String
 doFocus appNames = do
   apps <- getRunningApps
   loop $ (,) <$> appNames <*> apps
@@ -103,15 +104,16 @@ doFocus appNames = do
   matches :: String -> String -> Bool
   matches appName name = map toLower name == map toLower appName
 
-  loop :: [(String, NSRunningApplication)] -> IO ()
+  loop :: [(String, NSRunningApplication)] -> IO String
   loop = \case
     [] -> abort $ "No app found matching any of " ++ show appNames
     (appName, app) : rest ->
       (mfilter (matches appName) <$> getAppName app) >>= \case
         Nothing -> loop rest
         Just name ->
-          whenM (not <$> focusApp app) $
-            abort $ "Failed to focus app " ++ name
+          ifM (not <$> focusApp app)
+            (abort $ "Failed to focus app " ++ name)
+            (pure name)
 
 findCommandForApp :: String -> Config -> Maybe Command
 findCommandForApp app Config{..} =
