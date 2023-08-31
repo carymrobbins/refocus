@@ -17,5 +17,5 @@ run: build
 	stack exec refocus $(COMMAND)
 
 install: build
-	sudo cp $(PWD)/.stack-work/install/x86_64-osx/lts-12.13/8.4.3/bin/refocus /usr/local/bin
+	sudo cp $(shell stack exec which refocus) /usr/local/bin
 	sudo cp $(PWD)/RefocusAppKitUtil.dylib /usr/local/lib
